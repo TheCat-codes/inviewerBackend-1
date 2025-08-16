@@ -1,0 +1,10 @@
+POST localhost:3000/login
+Content-Type: application/json
+
+{
+  "name":"diegoAlexander",
+  "username":"diegogo",
+  "email": "dideiedi@djwndw",
+  "password": "dnwndkwndw",
+  "birthdate": "2025-10-08"
+}

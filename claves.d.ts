@@ -1,0 +1,2 @@
+export declare const TOKEN_KEY = "jdbwjfwlnflwnflkehnzlhrleizgh33rxrfg3rlqjliam2haougfrunajrbfrlbzrlbfr3zfr33zr3zf3rf3zthgz";
+//# sourceMappingURL=claves.d.ts.map
