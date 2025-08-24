@@ -16,7 +16,8 @@ app.use(express.json({
 }));
 app.use(cookieParser());
 app.use('/', router);
-app.listen(4000, () => {
-    console.log(`http://localhost:4000`);
+const PORT = 4000;
+app.listen(PORT, () => {
+    console.log(`http://localhost:` + PORT);
 });
 //# sourceMappingURL=app.js.map

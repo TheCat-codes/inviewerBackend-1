@@ -20,7 +20,7 @@ app.use(cookieParser())
 
 app.use('/', router)
 
-const PORT = 4000
+const PORT = 3000
 app.listen(PORT, () => {
   console.log(`http://localhost:`+PORT)
 })
