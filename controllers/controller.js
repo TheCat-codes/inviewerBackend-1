@@ -54,12 +54,12 @@ export class Controllers {
             const logged = await Models.login(username, password);
             if (!logged)
                 return res.status(404).json({ message: 'not found' });
-            const token = jwt.sign(logged, 'jhjhjhjhjhkhyjfbtuftfty', { expiresIn: '10m' });
+            const token = jwt.sign(logged, 'jhjhjhjhjhkhyjfbtuftfty', { expiresIn: '1h' });
             res.cookie('access_token', token, {
                 sameSite: 'none',
                 secure: true,
                 httpOnly: true,
-                maxAge: 1000 * 60 * 10
+                maxAge: 1000 * 60 * 60
             });
             res.status(200).json({ user: logged });
         }

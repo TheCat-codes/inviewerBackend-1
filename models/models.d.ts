@@ -1,6 +1,9 @@
 import mysql2 from 'mysql2/promise';
 import type { Job, Skill, Solicitude, User } from '../types.js';
 export declare class Models {
+    private static _connection;
+    static initializeConnection(): Promise<void>;
+    private static getConnection;
     static sendCode: (email: string) => Promise<{
         message: string;
     } | undefined>;

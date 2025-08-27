@@ -4,23 +4,8 @@ import nodemailer from 'nodemailer';
 import crypto from 'crypto';
 import bcrypt from 'bcrypt';
 import dotenv from 'dotenv';
-// const config = {
-//   host:process.env.HOST!,
-//   port: Number(process.env.PORT!),
-//   database:process.env.DATABASE!,
-//   user: process.env.USER!,
-//   password: process.env.PASSWORD!
-// }
 dotenv.config();
-console.log(process.env.DB_USER);
-console.log(process.env.DB_PASSWORD);
-const connection = await mysql2.createConnection({
-    host: process.env.DB_HOST,
-    port: Number(process.env.DB_PORT),
-    database: process.env.DB_DATABASE,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD
-});
+const dburl = process.env.DB_URL;
 function returnError(e) {
     if (e instanceof ConnectionError) {
         throw new ConnectionError('Connection Error');
@@ -38,9 +23,44 @@ const transporter = nodemailer.createTransport({
 });
 const salt = 10;
 export class Models {
+    static _connection;
+    static async initializeConnection() {
+        const MAX_RETRIES = 35;
+        const RETRY_DELAY_MS = 2000; // 2 segundos de retraso entre reintentos
+        for (let i = 0; i < MAX_RETRIES; i++) {
+            try {
+                console.log(`Intentando conectar a MySQL... (Intento ${i + 1}/${MAX_RETRIES})`);
+                if (!dburl)
+                    return;
+                Models._connection = await mysql2.createPool(dburl); // Usamos dbConfig aquí
+                console.log('✅ Conexión a MySQL establecida con éxito.');
+                return; // Sale de la función si la conexión es exitosa
+            }
+            catch (error) {
+                console.error(`❌ Error al establecer la conexión (Intento ${i + 1}/${MAX_RETRIES}):`, error.message);
+                if (i < MAX_RETRIES - 1) {
+                    console.log(`Reintentando en ${RETRY_DELAY_MS / 1000} segundos...`);
+                    await new Promise(res => setTimeout(res, RETRY_DELAY_MS));
+                }
+                else {
+                    const errorMessage = `🔴 Falló la conexión a MySQL después de ${MAX_RETRIES} intentos.`;
+                    console.error(errorMessage);
+                    throw new ConnectionError(errorMessage); // Lanzamos un error si todos los intentos fallan
+                }
+            }
+        }
+    }
+    // Método auxiliar para obtener la conexión, asegurando que esté disponible
+    static getConnection() {
+        if (!Models._connection) {
+            throw new ConnectionError('Database connection not established. Call initializeConnection() first.');
+        }
+        return Models._connection;
+    }
     static sendCode = async (email) => {
         if (!email)
             throw new InvalidTypes('Insert an email');
+        const connection = Models.getConnection(); // Obtener la conexión
         try {
             const [exists] = await connection.query(`select * from users where email = ?;`, [email]);
             const user = exists;
@@ -68,6 +88,7 @@ export class Models {
     static verifyCode = async (code, email) => {
         if (!email || !code)
             throw new InvalidTypes('No data provided');
+        const connection = Models.getConnection(); // Obtener la conexión
         try {
             const [verification] = await connection.query(`
         select email, expires_in, code from reset_passwords where email = ? and code = ?
@@ -87,6 +108,7 @@ export class Models {
     static resetPassword = async (email, code, newPassword) => {
         if (!email || !code || !newPassword)
             throw new InvalidTypes('No data provided');
+        const connection = Models.getConnection(); // Obtener la conexión
         try {
             const [verification] = await connection.query(`
         select email, expires_in, code from reset_passwords where email = ? and code = ?
@@ -114,6 +136,7 @@ export class Models {
     static login = async (username, password) => {
         if (!username || !password)
             throw new InvalidTypes('Data is empty');
+        const connection = Models.getConnection(); // Obtener la conexión
         try {
             const [logged] = await connection.query(`
         select bin_to_uuid(user_id) as user_id, name, username, email, password, birthdate from users where username = ?;        
@@ -140,6 +163,7 @@ export class Models {
     static sendEmailCode = async (email) => {
         if (!email)
             throw new InvalidTypes('Invalid Data');
+        const connection = Models.getConnection(); // Obtener la conexión
         try {
             const [sameEmail] = await connection.query(`
         select * from users where email = ?
@@ -157,7 +181,7 @@ export class Models {
             if (insertCode.affectedRows === 0)
                 throw new ConnectionError('Connection error');
             await transporter.sendMail({
-                from: `"InView"<diegocornejo958@gmail.com>`,
+                from: `"InViewer" <${process.env.NODEMAILER_USER}>`,
                 to: email,
                 subject: 'Verification Code',
                 text: `your verification code is ${code}`,
@@ -171,6 +195,7 @@ export class Models {
     static verifyEmailCode = async (email, code) => {
         if (!email || !code)
             throw new InvalidTypes('Invalid Data');
+        const connection = Models.getConnection(); // Obtener la conexión
         try {
             const [verifyCode] = await connection.query(`select * from check_email where email = ? and code = ? order by id desc limit 1`, [email, code]);
             if (verifyCode.length === 0)
@@ -188,6 +213,7 @@ export class Models {
         if (!name || !email || !username || !password || !birthdate || !code) {
             throw new InvalidTypes('Enter al the data');
         }
+        const connection = Models.getConnection(); // Obtener la conexión
         try {
             const [sameUsername] = await connection.query(`
         select * from users where username = ?
@@ -225,6 +251,7 @@ export class Models {
         }
     };
     static getWorks = async () => {
+        const connection = Models.getConnection(); // Obtener la conexión
         try {
             const [works] = await connection.query(`
         select bin_to_uuid(w.work_id) as work_id, w.description, w.salary, u.username, u.name, title from jobs w
@@ -240,6 +267,7 @@ export class Models {
         }
     };
     static getWorksByUser = async ({ id }) => {
+        const connection = Models.getConnection(); // Obtener la conexión
         try {
             const [works] = await connection.query(`
         select bin_to_uuid(w.work_id) as work_id, w.description, w.salary, u.username, u.name, title from jobs w
@@ -256,6 +284,7 @@ export class Models {
         }
     };
     static getUser = async (id) => {
+        const connection = Models.getConnection(); // Obtener la conexión
         try {
             const [search] = await connection.query('select bin_to_uuid(user_id) as user_id, username, password, name, email, birthdate from users where uuid_to_bin(?) = user_id', [id]);
             const user = search;
@@ -270,6 +299,7 @@ export class Models {
     static publishWork = async ({ description, salary, boss, title }) => {
         if (!description || !boss || !salary || !title)
             throw new InvalidTypes('Complete the Job Description');
+        const connection = Models.getConnection(); // Obtener la conexión
         try {
             const [insertJob] = await connection.query(`
         insert into jobs (description, salary, boss, title)
@@ -286,6 +316,7 @@ export class Models {
     static sendSolicitude = async ({ work_id, cv_url, user_id }) => {
         if (!work_id || !user_id || !cv_url)
             throw new InvalidTypes('Try later!');
+        const connection = Models.getConnection(); // Obtener la conexión
         try {
             const [postSolicitude] = await connection.query(`
         insert into solicitudes (work_id, user_id, resume_url)
@@ -302,6 +333,7 @@ export class Models {
     static getSolicitudesByWork = async ({ id }) => {
         if (!id)
             throw new InvalidTypes('Invalid data');
+        const connection = Models.getConnection(); // Obtener la conexión
         try {
             const [solicitudes] = await connection.query(`
         select u.username, s.resume_url, u.name, created_at, bin_to_uuid(s.solicitude_id) as solicitude_id, bin_to_uuid(s.user_id) as user_id, bin_to_uuid(s.work_id) as work_id from solicitudes s
@@ -320,6 +352,7 @@ export class Models {
     static addSkills = async ({ user_id, skill_id }) => {
         if (!user_id || !skill_id)
             throw new InvalidTypes('No data provided');
+        const connection = Models.getConnection(); // Obtener la conexión
         try {
             const [existedSkill] = await connection.query(`
         select * from user_skills where user_id = uuid_to_bin(?) and skill_id = ?;
@@ -342,6 +375,7 @@ export class Models {
     static removeSkill = async ({ user_id, skill }) => {
         if (!user_id || !skill)
             throw new InvalidTypes('No data provided');
+        const connection = Models.getConnection(); // Obtener la conexión
         try {
             const [remSkill] = await connection.query(`
         delete from user_skills
@@ -358,6 +392,7 @@ export class Models {
     static searchSkills = async (search) => {
         if (!search)
             throw new InvalidTypes('Empty search not allowed');
+        const connection = Models.getConnection(); // Obtener la conexión
         try {
             const [skillsSearch] = await connection.query(`select * from skills where skill like(?)`, [`%${search}%`]);
             if (skillsSearch.length === 0)
@@ -371,6 +406,7 @@ export class Models {
     static getWorksBySearch = async ({ search }) => {
         if (!search)
             throw new InvalidTypes('empty search is not valid');
+        const connection = Models.getConnection(); // Obtener la conexión
         try {
             const [searchWorks] = await connection.query(`
         select bin_to_uuid(w.work_id) as work_id, w.description, w.salary, u.username, u.name, title from jobs w
@@ -389,6 +425,7 @@ export class Models {
     static removeSolicitude = async ({ work_id, user_id }) => {
         if (!work_id || !user_id)
             throw new InvalidTypes('No data provided');
+        const connection = Models.getConnection(); // Obtener la conexión
         try {
             const [remSolicitud] = await connection.query(`
         delete from solicitudes where user_id = uuid_to_bin(?) and work_id = uuid_to_bin(?) 
@@ -404,6 +441,7 @@ export class Models {
     static getSkillsByUser = async ({ id }) => {
         if (!id)
             throw new InvalidTypes('No data provided');
+        const connection = Models.getConnection(); // Obtener la conexión
         try {
             const [skills] = await connection.query(`
         select s.skill, s.skill_id  from  user_skills us
@@ -419,6 +457,7 @@ export class Models {
         }
     };
     static getSkills = async () => {
+        const connection = Models.getConnection(); // Obtener la conexión
         try {
             const [skills] = await connection.query(`
         select skill from skills;
@@ -435,6 +474,7 @@ export class Models {
     static removeJob = async ({ id }) => {
         if (!id)
             throw new InvalidTypes('No data provided');
+        const connection = Models.getConnection(); // Obtener la conexión
         try {
             const [removed] = await connection.query(`delete from jobs where work_id = uuid_to_bin(?)`, [id]);
             if (removed.affectedRows === 0)
@@ -448,6 +488,7 @@ export class Models {
     static getMySolicitudes = async ({ id }) => {
         if (!id)
             throw new InvalidTypes('Invalid data');
+        const connection = Models.getConnection(); // Obtener la conexión
         try {
             const [solicitudes] = await connection.query(`
         SELECT 
@@ -473,6 +514,7 @@ export class Models {
         }
     };
     static getSolicitudes = async () => {
+        const connection = Models.getConnection(); // Obtener la conexión
         try {
             const [solicitudes] = await connection.query(`
         select bin_to_uuid(user_id) as user_id, bin_to_uuid(work_id) as work_id, solicitude_id from solicitudes;
@@ -488,6 +530,7 @@ export class Models {
     };
     static updateProfile = async (name, username, user_id) => {
         try {
+            const connection = Models.getConnection(); // Obtener la conexión
             const [update] = await connection.query(`
         update users set name = ?, username = ? where user_id = uuid_to_bin(?)  
       `, [name, username, user_id]);
